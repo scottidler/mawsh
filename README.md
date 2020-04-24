@@ -1,2 +1,2 @@
 # maws
-maws script
+maws helper script
