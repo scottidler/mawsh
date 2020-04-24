@@ -10,6 +10,8 @@ if ! hash maws &>/dev/null; then
     exit 1
 fi
 
+export AWS_DEFAULT_REGION=us-west-2
+
 function get_p2a() {
     python3 <<EOF
 import json
@@ -27,7 +29,7 @@ eval $(get_p2a)
 
 function usage() {
     cat <<EOF
-usage: $(basename $0) [-h] [-r SUFFIX] exec|login|role-arn account
+usage: $(basename $0) [-h] [-a <action>] [-r <role-suffix>] account
 EOF
     exit 1
 }
@@ -37,14 +39,16 @@ function help() {
         accounts+=$'\n'" - $account"
     done
     cat <<EOF
-usage: $(basename $0) [-h] [-r SUFFIX] exec|login|role-arn account
+usage: $(basename $0) [-h] [-a <action>] [-r <role-suffix>] account
 
 accounts: ${accounts}
 
 positional:
-  exec|login|role-arn   action to perform
+    account             one of the valid accounts listed above
 
 optional:
+  -a|--action           [exec|login|role-arn]
+                        default="exec"; action to perform
   -r|--role-suffix      [admin|poweruser|readonly|viewonly]
                         default="admin"; choose the rule suffix
   -h|--help             show this help message and exit
@@ -86,20 +90,32 @@ function role_arn_action() {
     echo "arn:aws:iam::${P2A[$profile]}:role/maws-$role_suffix"
 }
 
-role_suffix="admin" #default
+ACTIONS=("exec" "login" "role-arn")
+ROLE_SUFFIXES=("admin" "poweruser" "readonly" "viewonly")
+action="${ACTIONS[0]}" #default
+role_suffix=""${ROLE_SUFFIXES[0]}"" #default
 
 while [[ $# -gt 0 ]]; do
     arg="${1}"
 
     case $arg in
-    (exec|login|role-arn)
-        action="${1}"
-        shift
+    (-a|--action)
+        if [[ " ${ACTIONS[@]} " =~ " ${2} " ]]; then
+            action="${2}"
+            shift
+            shift
+        else
+            usage
+        fi
         ;;
     (-r|--role-suffix)
-        role_suffix="${2}"
-        shift
-        shift
+        if [[ " ${ROLE_SUFFIXES[@]} " =~ " ${2} " ]]; then
+            role_suffix="${2}"
+            shift
+            shift
+        else
+            usage
+        fi
         ;;
     (-k|--kubeconfig)
         kubeconfig="${1}"
@@ -136,9 +152,3 @@ case "$action" in
     usage
     ;;
 esac
-
-# split string based on delimiter in shell https://stackoverflow.com/a/15988793
-# ${VAR#*SUB}  # will drop begin of string up to first occur of `SUB`
-# ${VAR##*SUB} # will drop begin of string up to last occur of `SUB`
-# ${VAR%SUB*}  # will drop part of string from last occur of `SUB` to the end
-# ${VAR%%SUB*} # will drop part of string from first occur of `SUB` to the end
