@@ -1,0 +1,176 @@
+#!/bin/bash
+
+if [ -n "$DEBUG" ]; then
+    PS4=':${LINENO}+'
+    set -x
+fi
+
+# src: https://stackoverflow.com/a/28776166
+sourced=0
+if [ -n "$ZSH_EVAL_CONTEXT" ]; then
+    case $ZSH_EVAL_CONTEXT in *:file) sourced=1;; esac
+elif [ -n "$KSH_VERSION" ]; then
+    [ "$(cd $(dirname -- $0) && pwd -P)/$(basename -- $0)" != "$(cd $(dirname -- ${.sh.file}) && pwd -P)/$(basename -- ${.sh.file})" ] && sourced=1
+elif [ -n "$BASH_VERSION" ]; then
+    (return 0 2>/dev/null) && sourced=1
+else # All other shells: examine $0 for known shell binary filenames
+    # Detects `sh` and `dash`; add additional shell filenames as needed.
+    case ${0##*/} in sh|dash) sourced=1;; esac
+fi
+
+export AWS_DEFAULT_REGION=us-west-2
+
+function _mawsh_declare_p2a() {
+    python3 <<EOF
+import json
+import requests
+
+url = 'https://mozilla-it.github.io/itsre-accounts/accounts.json'
+result = requests.get(url)
+assert result.status_code == 200
+p2a = json.loads(result.content)
+hash = ' '.join([f'[{profile}]={account}' for profile,account in p2a.items()])
+print(f'declare -A P2A=( {hash} )')
+EOF
+}
+eval $(_mawsh_declare_p2a)
+
+function _mawsh_p2a_keys() {
+    if [ -n "$ZSH_EVAL_CONTEXT" ]; then
+        echo "${(k)P2A}"
+    elif [ -n "$KSH_VERSION" ] || [ -n "$BASH_VERSION" ]; then
+        echo "${!P2A[@]}"
+    else
+        echo "!error"
+    fi
+}
+
+function _mawsh_usage() {
+    cat <<EOF
+usage: $(basename $0) [-h] [-a <action>] [-r <role-suffix>] account
+EOF
+    return 1
+}
+
+function _mawsh_help() {
+    accounts=""
+    for account in $(_mawsh_p2a_keys); do
+        accounts+=$'\n'" - $account"
+    done
+    cat <<EOF
+usage: $(basename $0) [-h] [-a <action>] [-r <role-suffix>] account
+
+accounts: ${accounts}
+
+positional:
+    account             one of the valid accounts listed above
+
+optional:
+  -a|--action           [exec|login|role-arn]
+                        default="exec"; action to perform
+  -r|--role-suffix      [admin|poweruser|readonly|viewonly]
+                        default="admin"; choose the rule suffix
+  -h|--help             show this help message and exit
+
+EOF
+    return 1
+}
+
+function _mawsh_main() {
+	if ! hash maws 2>/dev/null; then
+		echo "install maws"
+	fi
+    # STUPID! can't doe ACTIONS[0] because bash (0) and zsh (1) index differently
+    ACTIONS=("exec" "login" "role-arn"); action="exec"
+    ROLE_SUFFIXES=("admin" "poweruser" "readonly" "viewonly"); role_suffix="admin"
+    exitcode=0
+    while [[ $# -gt 0 ]]; do
+        arg="${1}"
+
+        case $arg in
+        (-a|--action)
+            if [[ " ${ACTIONS[@]} " =~ " ${2} " ]]; then
+                action="${2}"
+                shift
+                shift
+            else
+                _mawsh_usage
+                exitcode=$?
+                break
+            fi
+            ;;
+        (-r|--role-suffix)
+            if [[ " ${ROLE_SUFFIXES[@]} " =~ " ${2} " ]]; then
+                role_suffix="${2}"
+                shift
+                shift
+            else
+                _mawsh_usage
+                exitcode=$?
+                break
+            fi
+            ;;
+        (-k|--kubeconfig)
+            kubeconfig="${2}"
+            shift
+            shift
+            ;;
+        (-h|--help)
+            _mawsh_help
+            exitcode=$?
+            break
+            ;;
+        (*)
+            account=${P2A[$1]}
+            if [[ -n "$account" ]]; then
+                profile="${1}"
+                shift
+                break
+            else
+                _mawsh_usage
+                exitcode=$?
+                break
+            fi
+            ;;
+        esac
+    done
+
+    if [ $exitcode -eq 0 ]; then
+        role_arn="arn:aws:iam::${account}:role/maws-${role_suffix}"
+        >&2 echo "profile$profile account=$account role_arn=$role_arn role_suffix=$role_suffix"
+        case "$action" in
+        (exec)
+            if [[ -z "$AWS_SESSION_EXPIRATION" || $AWS_SESSION_EXPIRATION -lt $(date +%s) ]]; then
+                echo "session expired"
+                result=$(maws --role-arn $role_arn)
+                tmpfile=${result//* }
+                for pair in $(cat $tmpfile | grep export | grep AWS | sed 's|export ||'); do
+                    export $pair
+                done
+            else
+                echo "using existing session"
+            fi
+            if [ -n "$1" ]; then
+                $@
+            fi
+           ;;
+        (login)
+            echo "login $profile $role_suffix $role_arn"
+            maws -w --role-arn $role_arn
+            ;;
+        (role-arn)
+            echo $role_arn
+            ;;
+        (*)
+            _mawsh_usage
+            exitcode=$?
+            ;;
+        esac
+    else
+        echo "exitcode=$exitcode"
+    fi
+}
+
+if [[ $sourced -eq 0 ]]; then
+	_mawsh_main "$@"
+fi

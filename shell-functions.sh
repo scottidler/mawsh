@@ -18,8 +18,3 @@ fi
 function mawsh() {
     _mawsh_main "$@"
 }
-
-#function testy() {
-#    . $REAL_PATH/bin/testy
-#    do_testy
-#}
