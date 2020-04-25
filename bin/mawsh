@@ -18,8 +18,6 @@ else # All other shells: examine $0 for known shell binary filenames
     case ${0##*/} in sh|dash) sourced=1;; esac
 fi
 
-export AWS_DEFAULT_REGION=us-west-2
-
 function _mawsh_declare_p2a() {
     python3 <<EOF
 import json
@@ -86,7 +84,6 @@ function _mawsh_main() {
     exitcode=0
     while [[ $# -gt 0 ]]; do
         arg="${1}"
-
         case $arg in
         (-a|--action)
             if [[ " ${ACTIONS[@]} " =~ " ${2} " ]]; then
@@ -137,9 +134,9 @@ function _mawsh_main() {
 
     if [ $exitcode -eq 0 ]; then
         role_arn="arn:aws:iam::${account}:role/maws-${role_suffix}"
-        >&2 echo "profile$profile account=$account role_arn=$role_arn role_suffix=$role_suffix"
         case "$action" in
         (exec)
+            export AWS_DEFAULT_REGION=us-west-2
             if [[ -z "$AWS_SESSION_EXPIRATION" || $AWS_SESSION_EXPIRATION -lt $(date +%s) ]]; then
                 echo "session expired"
                 result=$(maws --role-arn $role_arn)
@@ -166,8 +163,6 @@ function _mawsh_main() {
             exitcode=$?
             ;;
         esac
-    else
-        echo "exitcode=$exitcode"
     fi
 }
 
