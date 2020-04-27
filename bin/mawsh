@@ -75,6 +75,7 @@ optional:
                         default="exec"; action to perform
   -r|--role-suffix      [admin|poweruser|readonly|viewonly]
                         default="admin"; choose the rule suffix
+  -k|--kubeconfig       supply the kubeconfig to fetch and apply
   -h|--help             show this help message and exit
 
 EOF
@@ -153,6 +154,9 @@ function _mawsh_main() {
                 done
             else
                 echo "using existing session"
+            fi
+            if [ -n "$kubeconfig" ]; then
+                aws eks update-kubeconfig --name $kubeconfig --alias $kubeconfig
             fi
             if [ -n "$1" ]; then
                 $@
