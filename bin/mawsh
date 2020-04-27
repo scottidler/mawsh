@@ -27,20 +27,23 @@ url = 'https://mozilla-it.github.io/itsre-accounts/accounts.json'
 result = requests.get(url)
 assert result.status_code == 200
 p2a = json.loads(result.content)
-hash = ' '.join([f'[{profile}]={account}' for profile,account in p2a.items()])
-print(f'declare -A P2A=( {hash} )')
+body = ' '.join([f'[{p}]={a}' for p,a in p2a.items()])
+print(f'declare -A P2A=( {body} )')
 EOF
 }
 eval $(_mawsh_declare_p2a)
 
 function _mawsh_p2a_keys() {
+    keys=""
     if [ -n "$ZSH_EVAL_CONTEXT" ]; then
-        echo "${(k)P2A}"
+        sorted=$(printf "%s\n" ${(ko)P2A[@]})
     elif [ -n "$KSH_VERSION" ] || [ -n "$BASH_VERSION" ]; then
-        echo "${!P2A[@]}"
+        read -a unsorted <<< ${!P2A[@]}
+        readarray -t sorted < <(printf '%s\0' "${unsorted[@]}" | sort -z | xargs -0n1)
     else
         echo "!error"
     fi
+    echo "${sorted[@]}"
 }
 
 function _mawsh_usage() {
