@@ -18,7 +18,11 @@ else # All other shells: examine $0 for known shell binary filenames
     case ${0##*/} in sh|dash) sourced=1;; esac
 fi
 
-function _mawsh_declare_p2a() {
+# A2N: account ->number hash
+# this bit of inline python3 fetches the json file,
+# loads it and then echos the shell declaration for
+# an associative array named A2N
+function _mawsh_declare_a2n() {
     python3 <<EOF
 import json
 import requests
@@ -26,19 +30,19 @@ import requests
 url = 'https://mozilla-it.github.io/itsre-accounts/accounts.json'
 result = requests.get(url)
 assert result.status_code == 200
-p2a = json.loads(result.content)
-body = ' '.join([f'[{p}]={a}' for p,a in p2a.items()])
-print(f'declare -A P2A=( {body} )')
+a2n = json.loads(result.content)
+body = ' '.join([f'[{p}]={a}' for p,a in a2n.items()])
+print(f'declare -A A2N=( {body} )')
 EOF
 }
-eval $(_mawsh_declare_p2a)
+eval $(_mawsh_declare_a2n)
 
-function _mawsh_p2a_keys() {
+function _mawsh_a2n_keys() {
     keys=""
     if [ -n "$ZSH_EVAL_CONTEXT" ]; then
-        sorted=$(printf "%s\n" ${(ko)P2A[@]})
+        sorted=$(printf "%s\n" ${(ko)A2N[@]})
     elif [ -n "$KSH_VERSION" ] || [ -n "$BASH_VERSION" ]; then
-        read -a unsorted <<< ${!P2A[@]}
+        read -a unsorted <<< ${!A2N[@]}
         readarray -t sorted < <(printf '%s\0' "${unsorted[@]}" | sort -z | xargs -0n1)
     else
         echo "!error"
@@ -55,7 +59,7 @@ EOF
 
 function _mawsh_help() {
     accounts=""
-    for account in $(_mawsh_p2a_keys); do
+    for account in $(_mawsh_a2n_keys); do
         accounts+=$'\n'" - $account"
     done
     cat <<EOF
@@ -121,9 +125,9 @@ function _mawsh_main() {
             break
             ;;
         (*)
-            account=${P2A[$1]}
-            if [[ -n "$account" ]]; then
-                profile="${1}"
+            number=${A2N[$1]}
+            if [[ -n "$number" ]]; then
+                account="${1}"
                 shift
                 break
             else
@@ -136,7 +140,7 @@ function _mawsh_main() {
     done
 
     if [ $exitcode -eq 0 ]; then
-        role_arn="arn:aws:iam::${account}:role/maws-${role_suffix}"
+        role_arn="arn:aws:iam::${number}:role/maws-${role_suffix}"
         case "$action" in
         (exec)
             export AWS_DEFAULT_REGION=us-west-2
@@ -155,7 +159,7 @@ function _mawsh_main() {
             fi
            ;;
         (login)
-            echo "login $profile $role_suffix $role_arn"
+            echo "login $account $role_suffix $role_arn"
             maws -w --role-arn $role_arn
             ;;
         (role-arn)
