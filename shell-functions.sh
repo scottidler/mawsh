@@ -14,7 +14,7 @@ if [ -L "$0" ]; then
     LINK_PATH=$REAL_PATH; REAL_PATH="$(dirname "$REAL_FILE")"
 fi
 
-. $REAL_PATH/bin/mawsh
 function mawsh() {
+    . $REAL_PATH/bin/mawsh
     _mawsh_main "$@"
 }

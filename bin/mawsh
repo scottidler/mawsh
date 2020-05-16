@@ -163,7 +163,6 @@ function _mawsh_main() {
             fi
            ;;
         (login)
-            echo "login $account $role_suffix $role_arn"
             maws -w --role-arn $role_arn
             ;;
         (role-arn)
