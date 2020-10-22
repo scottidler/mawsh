@@ -27,9 +27,9 @@ function _mawsh_declare_a2n() {
 import json
 import requests
 
-url = 'https://mozilla-it.github.io/itsre-accounts/accounts.json'
+url = 'https://mozilla-it.github.io/itse-accounts/accounts.json'
 result = requests.get(url)
-assert result.status_code == 200
+assert result.status_code == 200, "couldn't retrieve accounts.json"
 a2n = json.loads(result.content)
 body = ' '.join([f'[{p}]={a}' for p,a in a2n.items()])
 print(f'declare -A A2N=( {body} )')
